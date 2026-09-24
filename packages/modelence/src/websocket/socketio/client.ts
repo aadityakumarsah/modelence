@@ -13,6 +13,7 @@ interface ActiveLiveSubscription {
   args: Record<string, unknown>;
 }
 const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
+const activeChannels = new Set<string>();
 
 function getSocket(): Socket {
   if (!socketClient) {
@@ -33,6 +34,9 @@ function resubscribeAll() {
       clientInfo,
     });
   }
+  for (const channelName of activeChannels) {
+    socketClient?.emit('joinChannel', channelName);
+  }
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
@@ -46,9 +50,9 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
 
   // Subscribe to all live queries on connect/reconnect
   socketClient.on('connect', () => {
-    if (activeLiveSubscriptions.size > 0) {
+    if (activeLiveSubscriptions.size > 0 || activeChannels.size > 0) {
       console.log(
-        `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`
+        `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries and ${activeChannels.size} channels`
       );
       resubscribeAll();
     }
@@ -92,19 +96,25 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 }
 
 function joinChannel({ category, id }: { category: string; id: string }) {
-  emit({
-    eventName: 'joinChannel',
-    category,
-    id,
-  });
+  activeChannels.add(`${category}:${id}`);
+  if (getSocket().connected) {
+    emit({
+      eventName: 'joinChannel',
+      category,
+      id,
+    });
+  }
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
-  emit({
-    eventName: 'leaveChannel',
-    category,
-    id,
-  });
+  activeChannels.delete(`${category}:${id}`);
+  if (getSocket().connected) {
+    emit({
+      eventName: 'leaveChannel',
+      category,
+      id,
+    });
+  }
 }
 
 let liveQueryCounter = 0;
