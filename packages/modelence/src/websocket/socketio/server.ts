@@ -28,8 +28,6 @@ export async function init({
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
 
-  console.log('Initializing Socket.IO server...');
-
   let mongoCollection: Collection<Document> | null = null;
 
   if (isMultiInstance && mongodbClient) {
@@ -79,8 +77,9 @@ export async function init({
 
     try {
       socket.data = await authenticate(token);
-    } finally {
       next();
+    } catch (error) {
+      next(error instanceof Error ? error : new Error(String(error)));
     }
   });
 
@@ -111,15 +110,12 @@ export async function init({
 
     socket.on('leaveChannel', (channelName: string) => {
       void socket.leave(channelName);
-      console.log(`User ${socket.id} left channel ${channelName}`);
       socket.emit('leftChannel', channelName);
     });
 
     socket.on('subscribeLiveQuery', (payload) => handleSubscribeLiveQuery(socket, payload));
     socket.on('unsubscribeLiveQuery', (payload) => handleUnsubscribeLiveQuery(socket, payload));
   });
-
-  console.log('Socket.IO server initialized');
 }
 
 function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
